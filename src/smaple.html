@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo List</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        #todoPanel {
+            height: 100%;
+            width: 350px;
+            position: fixed;
+            top: 0;
+            right: -500px;
+            background-color: #333;
+            color: white;
+            padding: 20px;
+            transition: 0.3s;
+        }
+
+        #todoToggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        #todoList {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        #todoList li {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="todoPanel">
+        <h2>Todo List</h2>
+        <ul id="todoList">
+            <!-- Todo items will be added dynamically here -->
+        </ul>
+    </div>
+
+    <button id="todoToggle">Open Todo</button>
+
+    <script>
+        var todoPanel = document.getElementById('todoPanel');
+        var todoToggle = document.getElementById('todoToggle');
+
+        function toggleTodoPanel() {
+            var isOpen = todoPanel.style.right === '0px';
+            todoPanel.style.right = isOpen ? '-500px' : '0';
+
+            // Hide the button when the panel is open
+            todoToggle.style.display = isOpen ? 'block' : 'none';
+        }
+
+        todoToggle.addEventListener('click', toggleTodoPanel);
+
+        // Hide the todo panel when the mouse is moved out of it
+        todoPanel.addEventListener('mouseleave', function () {
+            todoPanel.style.right = '-500px';
+            todoToggle.style.display = 'block';
+        });
+
+        // You can dynamically add todo items using JavaScript
+        var todoList = document.getElementById('todoList');
+
+        function addTodoItem(text) {
+            var listItem = document.createElement('li');
+            listItem.textContent = text;
+            todoList.appendChild(listItem);
+        }
+
+        // Example: addTodoItem('Buy groceries');
+    </script>
+
+</body>
+</html>

@@ -62,8 +62,14 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/m
 This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
 
 ### Deployment
+The Pomodoro Project home page is mentioned below.
+![Pomdoro Home Page](https://github.com/yogesh9275/Pomodoro/assets/52611925/7e7b7f4f-9fa5-48f9-afd7-90a27bf5159b) 
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+It is also integrated with the to-do list.
+
+![todo list](https://github.com/yogesh9275/Pomodoro/assets/52611925/773ad83d-776a-4fef-b8be-0ab6b500bf89)
+
+
 
 ### `npm run build` fails to minify
 

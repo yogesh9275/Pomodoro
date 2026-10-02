@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Focus</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-stone-50 text-stone-800 antialiased">
+<div x-data="focusTimer()" class="mx-auto max-w-4xl px-5 py-10 sm:py-16"
+     x-effect="document.title = timer.status === 'idle' || !current ? 'Focus' : fmt(remaining) + ' · ' + current.name">
+
+  <header class="flex items-center justify-between">
+    <h1 class="text-lg font-semibold tracking-tight">Focus</h1>
+    <label class="flex cursor-pointer items-center gap-2 text-sm text-stone-500">
+      <input type="checkbox" x-model="sound" class="accent-blue-600"> Subtle sound
+    </label>
+  </header>
+
+  <!-- add task: the only Add button -->
+  <form @submit.prevent="add()" class="mt-6 flex flex-wrap items-end gap-3 border-b border-stone-200 pb-6">
+    <label class="min-w-[12rem] flex-1 text-xs text-stone-500">Task
+      <input x-ref="name" x-model="f.name" maxlength="120" autocomplete="off" placeholder="Write API documentation" class="input mt-1 block w-full text-stone-800">
+    </label>
+    <label class="text-xs text-stone-500">Hours
+      <input type="number" min="0" max="23" x-model.number="f.h" class="input mt-1 block w-16 text-stone-800 tabular-nums">
+    </label>
+    <label class="text-xs text-stone-500">Minutes
+      <input type="number" min="0" max="59" x-model.number="f.m" class="input mt-1 block w-16 text-stone-800 tabular-nums">
+    </label>
+    <label class="text-xs text-stone-500">Reminder
+      <select x-model="f.type" @change="f.val = f.type === 'interval' ? 15 : 10" class="input mt-1 block text-stone-800">
+        <option value="none">None</option>
+        <option value="before">Before end</option>
+        <option value="interval">Repeat every</option>
+      </select>
+    </label>
+    <label x-show="f.type !== 'none'" x-cloak class="rise text-xs text-stone-500">
+      <span x-text="f.type === 'before' ? 'Minutes before' : 'Every (minutes)'"></span>
+      <input type="number" min="1" max="600" x-model.number="f.val" class="input mt-1 block w-24 text-stone-800 tabular-nums">
+    </label>
+    <button class="btn btn-primary">Add task</button>
+  </form>
+
+  <main class="mt-10 grid gap-12 md:grid-cols-5">
+
+    <!-- current -->
+    <section class="md:col-span-3" aria-labelledby="cur-h">
+      <p x-show="lastDone" x-cloak x-transition.opacity role="status" class="mb-8 border-l-2 border-blue-600 pl-3 text-sm text-stone-600">
+        Finished: <span class="font-medium text-stone-800" x-text="lastDone"></span>
+      </p>
+
+      <div x-show="!current" x-cloak class="rise">
+        <h2 id="cur-h" class="text-xs font-medium uppercase tracking-wider text-stone-500">Current</h2>
+        <p class="mt-3 text-stone-500">No tasks queued. Add one above.</p>
+      </div>
+
+      <template x-for="c in tasks.slice(0, 1)" :key="c.id">
+        <div class="rise">
+          <div class="flex items-center gap-3 text-xs font-medium uppercase tracking-wider text-stone-500">
+            <h2 id="cur-h">Current</h2>
+            <span x-show="timer.status !== 'idle'" class="flex items-center gap-1.5 normal-case tracking-normal">
+              <span class="h-1.5 w-1.5 rounded-full" :class="timer.status === 'running' ? 'animate-pulse bg-blue-600' : 'bg-stone-400'"></span>
+              <span x-text="timer.status === 'running' ? 'Running' : 'Paused'"></span>
+            </span>
+          </div>
+          <p class="mt-3 break-words text-xl font-medium" x-text="c.name"></p>
+          <p class="mt-4 text-5xl font-light tabular-nums transition-colors duration-300 sm:text-6xl"
+             :class="timer.status === 'paused' && 'text-stone-400'" x-text="fmt(remaining)"></p>
+
+          <div x-show="timer.status !== 'idle'" class="mt-5 h-0.5 overflow-hidden bg-stone-200" role="progressbar"
+               aria-label="Elapsed" :aria-valuenow="Math.round(elapsed / durMs * 100)" aria-valuemin="0" aria-valuemax="100">
+            <div class="h-full bg-blue-600 transition-[width] duration-300 ease-linear" :style="`width:${elapsed / durMs * 100}%`"></div>
+          </div>
+
+          <p class="mt-3 text-sm text-stone-500" x-text="remLabel(c)"></p>
+
+          <div x-show="timer.status === 'idle'" class="mt-3 flex items-center gap-2 text-sm text-stone-500">
+            <input type="number" min="0" max="23" aria-label="Hours" :value="Math.floor(c.mins / 60)"
+                   @change="setMins(c, $event.target.value, c.mins % 60)" class="input w-16 tabular-nums text-stone-800"> h
+            <input type="number" min="0" max="59" aria-label="Minutes" :value="c.mins % 60"
+                   @change="setMins(c, Math.floor(c.mins / 60), $event.target.value)" class="input w-16 tabular-nums text-stone-800"> min
+          </div>
+
+          <div class="mt-6 flex flex-wrap gap-2">
+            <button type="button" class="btn btn-primary" x-show="timer.status === 'idle'" @click="start()" x-text="lastDone ? 'Start next' : 'Start'"></button>
+            <button type="button" class="btn" x-show="timer.status !== 'idle'" @click="toggle()" x-text="timer.status === 'running' ? 'Pause' : 'Resume'"></button>
+            <button type="button" class="btn" @click="complete()" x-text="confirming ? 'Confirm complete' : 'Complete'"></button>
+            <button type="button" class="btn" x-show="timer.status !== 'idle'" @click="stop()">Stop</button>
+            <button type="button" class="btn" x-show="timer.status === 'idle'" @click="remove(0)">Remove</button>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- queue -->
+    <section class="md:col-span-2" aria-labelledby="q-h">
+      <h2 id="q-h" class="text-xs font-medium uppercase tracking-wider text-stone-500">Up next</h2>
+      <p x-show="tasks.length < 2" class="mt-3 text-sm text-stone-400">Nothing queued after this.</p>
+      <ol x-show="tasks.length > 1" class="mt-3 divide-y divide-stone-200 border-y border-stone-200">
+        <template x-for="(t, i) in tasks.slice(1)" :key="t.id">
+          <li class="rise group flex items-center gap-2 px-1 py-2.5 transition duration-200 hover:bg-stone-100/70"
+              :class="t.leaving && 'translate-x-2 opacity-0'">
+            <span class="w-4 text-sm tabular-nums text-stone-400" x-text="i + 1"></span>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm" x-text="t.name" :title="t.name"></p>
+              <div class="mt-1 flex items-center gap-1 text-xs text-stone-400">
+                <input type="number" min="0" max="23" :aria-label="'Hours for ' + t.name" :value="Math.floor(t.mins / 60)"
+                       @change="setMins(t, $event.target.value, t.mins % 60)" class="input quiet w-10"> h
+                <input type="number" min="0" max="59" :aria-label="'Minutes for ' + t.name" :value="t.mins % 60"
+                       @change="setMins(t, Math.floor(t.mins / 60), $event.target.value)" class="input quiet w-10"> min
+              </div>
+            </div>
+            <span class="flex transition-opacity duration-150 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+              <button type="button" class="icon-btn" aria-label="Move up" :disabled="i === 0" @click="move(i + 1, -1)">↑</button>
+              <button type="button" class="icon-btn" aria-label="Move down" :disabled="i + 2 >= tasks.length" @click="move(i + 1, 1)">↓</button>
+              <button type="button" class="icon-btn" aria-label="Remove task" @click="remove(i + 1)">×</button>
+            </span>
+          </li>
+        </template>
+      </ol>
+    </section>
+  </main>
+
+  <footer class="mt-14 space-y-1 text-xs text-stone-400">
+    <p x-show="done" x-cloak x-text="`${done} task${done > 1 ? 's' : ''} completed`"></p>
+    <p x-text="permMsg"></p>
+    <p>Kept in this browser tab only; cleared when the browser session ends.</p>
+  </footer>
+
+  <div x-show="toastMsg" x-cloak role="status"
+       x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="translate-y-2 opacity-0"
+       x-transition:leave="transition duration-150" x-transition:leave-end="opacity-0"
+       class="fixed bottom-6 left-1/2 max-w-[90vw] -translate-x-1/2 rounded-md bg-stone-800 px-4 py-2.5 text-sm text-white" x-text="toastMsg"></div>
+</div>
+
+<script>
+function focusTimer() {
+  const KEY = "focusTimer.v2";
+  const fresh = () => ({ status: "idle", acc: 0, start: null, fired: {} });   // status: idle | running | paused
+  const mins = n => `${n} minute${n === 1 ? "" : "s"}`;
+  let audio = null, toastT = null;
+
+  return {
+    /* ---- state ---- */
+    tasks: [], timer: fresh(), sound: true, done: 0, lastDone: "",
+    t: Date.now(),                       // reactive "now", refreshed by tick(); all math derives from timestamps
+    confirming: false, toastMsg: "", perm: "default",
+    f: { name: "", h: 0, m: 45, type: "none", val: 10 },
+
+    /* ---- timer: elapsed = banked time + current running segment ---- */
+    get current() { return this.tasks[0]; },
+    get durMs() { return this.current ? this.current.mins * 60000 : 0; },
+    get elapsed() {
+      const T = this.timer;
+      return Math.max(0, Math.min(this.durMs, T.acc + (T.status === "running" ? this.t - T.start : 0)));
+    },
+    get remaining() { return Math.max(0, this.durMs - this.elapsed); },
+    get permMsg() {
+      return ({ granted: "Notifications on.", denied: "Notifications blocked — in-app alerts will be used.",
+                unsupported: "Notifications unsupported — in-app alerts will be used." })[this.perm]
+        || "Notification permission is requested when you start a task.";
+    },
+
+    init() {
+      this.perm = "Notification" in window ? Notification.permission : "unsupported";
+      try {
+        const [tasks, timer, sound, done, lastDone] = JSON.parse(sessionStorage.getItem(KEY) || "[]");
+        if (Array.isArray(tasks)) Object.assign(this, { tasks: tasks.map(t => ({ ...t, leaving: false })), timer: timer || fresh(), sound: sound !== false, done: done || 0, lastDone: lastDone || "" });
+      } catch (e) {}
+      if (!this.tasks.length) this.timer = fresh();
+      this.$watch(() => JSON.stringify([this.tasks, this.timer, this.sound, this.done, this.lastDone]),
+                  v => { try { sessionStorage.setItem(KEY, v); } catch (e) {} });
+      setInterval(() => this.tick(), 250);
+      document.addEventListener("visibilitychange", () => this.tick());
+      this.tick();                        // also finishes a task that ended while the tab was away
+      if (!this.tasks.length) this.$nextTick(() => this.$refs.name.focus());
+    },
+    tick() {
+      this.t = Date.now();
+      if (this.timer.status !== "running") return;
+      this.remaining <= 0 ? this.finish() : this.checkReminders();
+    },
+
+    /* ---- queue ---- */
+    clamp: n => Math.min(1439, Math.max(1, Math.round(+n) || 1)),
+    setMins(t, h, m) { t.mins = this.clamp((+h || 0) * 60 + (+m || 0)); },   // hours + minutes in, total minutes stored
+    add() {
+      const f = this.f;
+      this.tasks.push({ id: Date.now() + Math.random(), name: f.name.trim() || "Untitled task", mins: this.clamp(f.h * 60 + f.m),
+                        rem: { type: f.type, minutes: Math.max(1, f.val || 10) } });
+      f.name = ""; this.$refs.name.focus();
+    },
+    remove(i) {
+      if (i === 0) { this.tasks.splice(0, 1); this.timer = fresh(); return; }
+      const t = this.tasks[i], id = t.id;
+      t.leaving = true;                   // let the row fade out, then drop it
+      setTimeout(() => { const k = this.tasks.findIndex(x => x.id === id); if (k > -1) this.tasks.splice(k, 1); }, 180);
+    },
+    move(i, d) {
+      const j = i + d;
+      if (i < 1 || j < 1 || j >= this.tasks.length) return;   // index 0 (current task) never moves
+      [this.tasks[i], this.tasks[j]] = [this.tasks[j], this.tasks[i]];
+    },
+
+    /* ---- timer actions ---- */
+    start() {
+      if (!this.current) return;
+      this.lastDone = "";
+      this.t = Date.now();
+      this.timer = { status: "running", acc: 0, start: this.t, fired: {} };
+      if ("Notification" in window && Notification.permission === "default")
+        Notification.requestPermission().then(p => this.perm = p).catch(() => {});
+    },
+    toggle() {
+      const T = this.timer;
+      if (T.status === "running") { T.acc += Date.now() - T.start; T.start = null; T.status = "paused"; }
+      else { this.t = T.start = Date.now(); T.status = "running"; }
+    },
+    stop() { this.timer = fresh(); },     // abandon the run, keep the task current
+    complete() {
+      if (this.timer.status === "running" && !this.confirming) {   // only confirm while actively running
+        this.confirming = true; setTimeout(() => this.confirming = false, 3000); return;
+      }
+      this.advance();
+    },
+    advance() { this.tasks.shift(); this.done++; this.timer = fresh(); this.confirming = false; },   // next task becomes current, idle
+    finish() {
+      const name = this.current.name;
+      this.advance(); this.lastDone = name;
+      this.notify("Task finished", `"${name}" — your time is up.`);
+    },
+
+    /* ---- reminders: derived from elapsed time, each fires once ---- */
+    remLabel(t) {
+      return t.rem.type === "before" ? `Reminder ${t.rem.minutes} min before the end`
+           : t.rem.type === "interval" ? `Reminder every ${t.rem.minutes} min` : "No reminder";
+    },
+    checkReminders() {
+      const { type, minutes } = this.current.rem, ms = minutes * 60000, F = this.timer.fired;
+      let key = null;
+      if (type === "before" && ms < this.durMs && this.remaining <= ms) key = "before";
+      if (type === "interval" && Math.floor(this.elapsed / ms) >= 1) key = "int" + Math.floor(this.elapsed / ms);
+      if (!key || F[key]) return;
+      F[key] = 1;
+      this.notify("Reminder", `${mins(Math.ceil(this.remaining / 60000))} left on "${this.current.name}".`);
+    },
+
+    /* ---- notifications (browser first, in-app toast fallback) + one short quiet blip ---- */
+    notify(title, body) {
+      this.blip();
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          const n = new Notification(title, { body, silent: true, tag: "focus-timer" });
+          n.onclick = () => window.focus();
+          setTimeout(() => n.close(), 6000);
+          return;
+        } catch (e) {}
+      }
+      this.toastMsg = `${title} — ${body}`;
+      clearTimeout(toastT); toastT = setTimeout(() => this.toastMsg = "", 6000);
+    },
+    blip() {
+      if (!this.sound) return;
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        if (audio.state === "suspended") audio.resume();
+        const s = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
+        o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, s);
+        g.gain.exponentialRampToValueAtTime(0.07, s + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, s + 0.35);
+        o.connect(g); g.connect(audio.destination); o.start(s); o.stop(s + 0.4);
+      } catch (e) {}
+    },
+
+    fmt(ms) {
+      const s = Math.ceil(ms / 1000), h = Math.floor(s / 3600), p = n => String(n).padStart(2, "0");
+      return (h ? h + ":" : "") + p(Math.floor(s % 3600 / 60)) + ":" + p(s % 60);
+    }
+  };
+}
+</script>
+</body>
+</html>
